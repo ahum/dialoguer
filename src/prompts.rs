@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::io;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use console::Term;
@@ -48,6 +49,16 @@ pub struct Input<'a, T> {
     permit_empty: bool,
     validator: Option<Box<Fn(&str) -> Option<String>>>,
 }
+/// Renders a file input
+pub struct FileInput<'a> {
+    prompt: String,
+    default: Option<PathBuf>,
+    show_default: bool,
+    theme: &'a Theme,
+    permit_empty: bool,
+    validator: Option<Box<Fn(&str) -> Option<String>>>,
+}
+
 /// Renders a password input prompt.
 ///
 /// ## Example usage
@@ -140,6 +151,136 @@ impl<'a> Confirmation<'a> {
             term.clear_line()?;
             render.confirmation_prompt_selection(&self.text, rv)?;
             return Ok(rv);
+        }
+    }
+}
+
+impl<'a> FileInput<'a> {
+    /// Creates a new input prompt.
+    pub fn new() -> FileInput<'static> {
+        FileInput::with_theme(get_default_theme())
+    }
+
+    /// Creates an input with a specific theme.
+    pub fn with_theme(theme: &'a Theme) -> FileInput<'a> {
+        FileInput {
+            prompt: "".into(),
+            default: None,
+            show_default: true,
+            theme,
+            permit_empty: false,
+            validator: None,
+        }
+    }
+    /// Sets the input prompt.
+    pub fn with_prompt(&mut self, prompt: &str) -> &mut FileInput<'a> {
+        self.prompt = prompt.into();
+        self
+    }
+
+    /// Sets a default.
+    ///
+    /// Out of the box the prompt does not have a default and will continue
+    /// to display until the user hit enter.  If a default is set the user
+    /// can instead accept the default with enter.
+    pub fn default(&mut self, value: PathBuf) -> &mut FileInput<'a> {
+        self.default = Some(value);
+        self
+    }
+    /// Enables or disables an empty input
+    ///
+    /// By default, if there is no default value set for the input, the user must input a non-empty string.
+    pub fn allow_empty(&mut self, val: bool) -> &mut FileInput<'a> {
+        self.permit_empty = val;
+        self
+    }
+    /// Disables or enables the default value display.
+    ///
+    /// The default is to append `[default]` to the prompt to tell the
+    /// user that a default is acceptable.
+    pub fn show_default(&mut self, val: bool) -> &mut FileInput<'a> {
+        self.show_default = val;
+        self
+    }
+
+    /// Registers a validator.
+    pub fn validate_with<V: Validator + 'static>(&mut self, validator: V) -> &mut FileInput<'a> {
+        let old_validator_func = self.validator.take();
+        self.validator = Some(Box::new(move |value: &str| -> Option<String> {
+            if let Some(old) = old_validator_func.as_ref() {
+                if let Some(err) = old(value) {
+                    return Some(err);
+                }
+            }
+            match validator.validate(value) {
+                Ok(()) => None,
+                Err(err) => Some(err.to_string()),
+            }
+        }));
+        self
+    }
+
+    /// Enables user interaction and returns the result.
+    ///
+    /// If the user confirms the result is `true`, `false` otherwise.
+    /// The dialog is rendered on stderr.
+    pub fn interact(&self) -> io::Result<PathBuf> {
+        self.interact_on(&Term::stderr())
+    }
+
+    /// Like `interact` but allows a specific terminal to be set.
+    pub fn interact_on(&self, term: &Term) -> io::Result<PathBuf> {
+        let mut render = TermThemeRenderer::new(term, self.theme);
+        loop {
+            let default_string = self.default.as_ref().map(|x| {
+                let xs: &str = x.to_str().get_or_insert("");
+                String::from(xs)
+            });
+            // let default_string: &mut String = self
+            //     .default
+            //     .as_ref()
+            //     .map(|x| String::from(x.to_str()).as_ref())
+            //     .get_or_insert(String::from_str(""));
+            render.input_prompt(
+                &self.prompt,
+                if self.show_default {
+                    default_string.as_ref().map(|x| x.as_str())
+                //.map(|x| x.to_str())
+                } else {
+                    None
+                },
+            )?;
+            let input = term.read_line()?;
+            render.add_line();
+            if input.is_empty() {
+                render.clear()?;
+                if let Some(ref default) = self.default {
+                    // render.single_prompt_selection(
+                    //     &self.prompt,
+                    //     &default_string.map(|x| x.as_str().get_or_insert(""))?,
+                    // )?;
+                    return Ok(default.clone());
+                } else if !self.permit_empty {
+                    continue;
+                }
+            }
+            render.clear()?;
+            if let Some(ref validator) = self.validator {
+                if let Some(err) = validator(&input) {
+                    render.error(&err)?;
+                    continue;
+                }
+            }
+            match input.parse::<PathBuf>() {
+                Ok(value) => {
+                    render.single_prompt_selection(&self.prompt, &input)?;
+                    return Ok(value);
+                }
+                Err(err) => {
+                    render.error(&err.to_string())?;
+                    continue;
+                }
+            }
         }
     }
 }
