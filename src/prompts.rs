@@ -1,10 +1,13 @@
+use console::Key::Char;
+use console::{Key, Term};
 use std::fmt::{Debug, Display};
+use std::fs;
+use std::fs::DirEntry;
+use std::fs::ReadDir;
 use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-use console::Term;
-use theme::{get_default_theme, TermThemeRenderer, Theme};
+use theme::{get_default_theme, SelectionStyle, TermThemeRenderer, Theme};
 use validate::Validator;
 
 /// Renders a simple confirmation prompt.
@@ -59,6 +62,11 @@ pub struct FileInput<'a> {
     validator: Option<Box<Fn(&str) -> Option<String>>>,
 }
 
+struct FIState {
+    path: PathBuf,
+    read_dir: Option<ReadDir>,
+    selected: Option<DirEntry>,
+}
 /// Renders a password input prompt.
 ///
 /// ## Example usage
@@ -228,60 +236,153 @@ impl<'a> FileInput<'a> {
         self.interact_on(&Term::stderr())
     }
 
+    fn render(&self, ttr: &mut TermThemeRenderer, state: &FIState) -> io::Result<()> {
+        println!("render..");
+        // let default_string: &str = "?";
+        //  {
+        //     let mut s: Option<&str> = state.path.as_ref().to_str();
+        //     s.get_or_insert("")
+        // };
+        let ds = state.path.to_str().unwrap();
+        ttr.input_prompt(self.prompt.as_str(), Some(ds));
+        match state.read_dir {
+            Some(rd) => {
+                for d in rd {
+                    let t = d.unwrap().file_name().to_str().unwrap();
+                    ttr.selection(t, SelectionStyle::MenuSelected);
+                }
+            }
+            None => (),
+        }
+        Ok(())
+    }
+
+    fn inner_loop(
+        &self,
+        term: &Term,
+        ttr: &mut TermThemeRenderer,
+        state: FIState,
+    ) -> io::Result<PathBuf> {
+        println!("last_key: {:?}", state.path);
+        let k = term.read_key().unwrap();
+
+        self.render(ttr, &state);
+
+        match k {
+            Char('\t') => {
+                let rd = fs::read_dir(&state.path).unwrap();
+                let update = FIState {
+                    path: state.path,
+                    read_dir: Some(rd),
+                    selected: None,
+                };
+                self.inner_loop(term, ttr, update)
+            }
+            _ => Ok(state.path),
+        }
+    }
     /// Like `interact` but allows a specific terminal to be set.
     pub fn interact_on(&self, term: &Term) -> io::Result<PathBuf> {
         let mut render = TermThemeRenderer::new(term, self.theme);
-        loop {
-            let default_string = self.default.as_ref().map(|x| {
-                let xs: &str = x.to_str().get_or_insert("");
-                String::from(xs)
-            });
-            // let default_string: &mut String = self
-            //     .default
-            //     .as_ref()
-            //     .map(|x| String::from(x.to_str()).as_ref())
-            //     .get_or_insert(String::from_str(""));
-            render.input_prompt(
-                &self.prompt,
-                if self.show_default {
-                    default_string.as_ref().map(|x| x.as_str())
-                //.map(|x| x.to_str())
-                } else {
-                    None
-                },
-            )?;
-            let input = term.read_line()?;
-            render.add_line();
-            if input.is_empty() {
-                render.clear()?;
-                if let Some(ref default) = self.default {
-                    // render.single_prompt_selection(
-                    //     &self.prompt,
-                    //     &default_string.map(|x| x.as_str().get_or_insert(""))?,
-                    // )?;
-                    return Ok(default.clone());
-                } else if !self.permit_empty {
-                    continue;
-                }
-            }
-            render.clear()?;
-            if let Some(ref validator) = self.validator {
-                if let Some(err) = validator(&input) {
-                    render.error(&err)?;
-                    continue;
-                }
-            }
-            match input.parse::<PathBuf>() {
-                Ok(value) => {
-                    render.single_prompt_selection(&self.prompt, &input)?;
-                    return Ok(value);
-                }
-                Err(err) => {
-                    render.error(&err.to_string())?;
-                    continue;
-                }
-            }
-        }
+
+        let start_path = self.default.clone();
+        self.inner_loop(
+            term,
+            &mut render,
+            FIState {
+                path: start_path.unwrap(),
+                read_dir: None,
+                selected: None,
+            },
+        )
+        //let mut
+        // at a dir,
+        // listing children child selected
+        // let mut sel = self.default.as_ref();
+        // let mut children: Option<&ReadDir> = None;
+        // // let mut children: Vec<String> = vec![];
+        // let mut selected_child: Option<&str> = None;
+
+        // loop {
+        //     let default_string = sel.map(|x| {
+        //         let xs: &str = x.to_str().get_or_insert("");
+        //         String::from(xs)
+        //     });
+        //     // let default_string: &mut String = self
+        //     //     .default
+        //     //     .as_ref()
+        //     //     .map(|x| String::from(x.to_str()).as_ref())
+        //     //     .get_or_insert(String::from_str(""));
+        //     render.input_prompt(
+        //         &self.prompt,
+        //         if self.show_default {
+        //             default_string.as_ref().map(|x| x.as_str())
+        //         } else {
+        //             None
+        //         },
+        //     )?;
+
+        //     if children.is_some() {
+        //         let entries: &ReadDir = children.expect("need entries here");
+        //         entries.for_each(|r| {
+        //             let e: DirEntry = r.unwrap();
+        //             let name: &str = e.file_name().to_str().unwrap();
+        //             render.selection(
+        //                 name,
+        //                 if selected_child == Some(name) {
+        //                     SelectionStyle::MenuSelected
+        //                 } else {
+        //                     SelectionStyle::MenuUnselected
+        //                 },
+        //             );
+        //         });
+        //     }
+        //     let key = term.read_key()?;
+
+        //     //let input = term.read_line()?;
+        //     //render.add_line();
+        //     // if input.is_empty() {
+        //     //     render.clear()?;
+        //     //     if let Some(ref default) = self.default {
+        //     //         // render.single_prompt_selection(
+        //     //         //     &self.prompt,
+        //     //         //     &default_string.map(|x| x.as_str().get_or_insert(""))?,
+        //     //         // )?;
+        //     //         return Ok(default.clone());
+        //     //     } else if !self.permit_empty {
+        //     //         continue;
+        //     //     }
+        //     // }
+        //     // render.clear()?;
+        //     // if let Some(ref validator) = self.validator {
+        //     //     if let Some(err) = validator(&input) {
+        //     //         render.error(&err)?;
+        //     //         continue;
+        //     //     }
+        //     // }
+        //     println!("got raw key: {:?}", key);
+        //     match key {
+        //         Char('\t') => {
+        //             for d in fs::read_dir(self.default.as_ref().unwrap())? {
+        //                 let entry = d.expect("git entry");
+        //                 //entry.file_name()
+        //                 //println!("{:?}", entry.file_name());
+        //             }
+        //             continue;
+        //         }
+        //         _ => continue,
+        //     }
+        //     // match input.parse::<PathBuf>() {
+        //     //     Ok(value) => {
+        //     //         render.single_prompt_selection(&self.prompt, &input)?;
+        //     //         return Ok(value);
+        //     //     }
+        //     //     Err(err) => {
+        //     //         render.error(&err.to_string())?;
+        //     //         continue;
+        //     //     }
+        //     // }
+        // }
     }
 }
 
