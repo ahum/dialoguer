@@ -64,8 +64,8 @@ pub struct FileInput<'a> {
 
 struct FIState {
     path: PathBuf,
-    read_dir: Option<ReadDir>,
-    selected: Option<DirEntry>,
+    entries: Vec<DirEntry>,
+    selected: Option<u32>,
 }
 /// Renders a password input prompt.
 ///
@@ -237,22 +237,20 @@ impl<'a> FileInput<'a> {
     }
 
     fn render(&self, ttr: &mut TermThemeRenderer, state: &FIState) -> io::Result<()> {
-        println!("render..");
-        // let default_string: &str = "?";
-        //  {
-        //     let mut s: Option<&str> = state.path.as_ref().to_str();
-        //     s.get_or_insert("")
-        // };
-        let ds = state.path.to_str().unwrap();
-        ttr.input_prompt(self.prompt.as_str(), Some(ds));
-        match state.read_dir {
-            Some(rd) => {
-                for d in rd {
-                    let t = d.unwrap().file_name().to_str().unwrap();
-                    ttr.selection(t, SelectionStyle::MenuSelected);
-                }
-            }
-            None => (),
+        ttr.clear()?;
+
+        ttr.prompt(self.prompt.as_str())?;
+
+        for (index, e) in state.entries.iter().enumerate() {
+            let file_name = e.file_name();
+            let ss = if Some(index as u32) == state.selected {
+                SelectionStyle::MenuSelected
+            } else {
+                SelectionStyle::MenuUnselected
+            };
+            let os_str = file_name.to_str();
+            //.to_str();
+            ttr.selection(os_str.unwrap(), ss)?;
         }
         Ok(())
     }
@@ -263,18 +261,31 @@ impl<'a> FileInput<'a> {
         ttr: &mut TermThemeRenderer,
         state: FIState,
     ) -> io::Result<PathBuf> {
-        println!("last_key: {:?}", state.path);
+        // println!("last_key: {:?}", state.path);
         let k = term.read_key().unwrap();
 
-        self.render(ttr, &state);
+        self.render(ttr, &state)?;
 
         match k {
             Char('\t') => {
                 let rd = fs::read_dir(&state.path).unwrap();
+                let entries: Vec<DirEntry> = rd.map(|r| r.unwrap()).collect();
+                let index = match state.selected {
+                    Some(i) => {
+                        let ni = i + 1;
+                        if ni > (entries.len() - 1) as u32 {
+                            0
+                        } else {
+                            ni
+                        }
+                    }
+                    _ => 0,
+                };
+
                 let update = FIState {
                     path: state.path,
-                    read_dir: Some(rd),
-                    selected: None,
+                    entries,
+                    selected: Some(index),
                 };
                 self.inner_loop(term, ttr, update)
             }
@@ -291,7 +302,7 @@ impl<'a> FileInput<'a> {
             &mut render,
             FIState {
                 path: start_path.unwrap(),
-                read_dir: None,
+                entries: vec![],
                 selected: None,
             },
         )
