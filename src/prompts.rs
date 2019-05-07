@@ -1,3 +1,5 @@
+use crate::theme::{get_default_theme, SelectionStyle, TermThemeRenderer, Theme};
+use crate::validate::Validator;
 use console::Key::Char;
 use console::{Key, Term};
 use std::fmt::{Debug, Display};
@@ -7,9 +9,8 @@ use std::fs::ReadDir;
 use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
-use theme::{get_default_theme, SelectionStyle, TermThemeRenderer, Theme};
-use validate::Validator;
 
+// use crate::completers::path;
 /// Renders a simple confirmation prompt.
 ///
 /// ## Example usage

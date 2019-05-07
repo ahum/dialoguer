@@ -2,7 +2,7 @@ use std::io;
 use std::iter::repeat;
 use std::ops::Rem;
 
-use theme::{get_default_theme, SelectionStyle, TermThemeRenderer, Theme};
+use crate::theme::{get_default_theme, SelectionStyle, TermThemeRenderer, Theme};
 
 use console::{Key, Term};
 
