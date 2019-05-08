@@ -23,7 +23,6 @@ pub use prompts::{Confirmation, FileInput, Input, PasswordInput};
 pub use select::{Checkboxes, Select};
 pub use validate::Validator;
 
-mod completers;
 mod edit;
 mod prompts;
 mod select;

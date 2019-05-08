@@ -65,8 +65,8 @@ pub struct FileInput<'a> {
 
 struct FIState {
     path: PathBuf,
-    entries: Vec<DirEntry>,
-    selected: Option<u32>,
+    entries: Vec<String>,
+    selected: Option<i32>,
 }
 /// Renders a password input prompt.
 ///
@@ -238,22 +238,53 @@ impl<'a> FileInput<'a> {
     }
 
     fn render(&self, ttr: &mut TermThemeRenderer, state: &FIState) -> io::Result<()> {
+
+        // println!("ph: {:?}", ttr.prompt_height);
         ttr.clear()?;
+        
+        let current : Option<&str> = state.path.as_os_str().to_str();
+        let p = format!("{} {}", self.prompt, current.unwrap_or(""));
 
-        ttr.prompt(self.prompt.as_str())?;
+        ttr.prompt(&p)?; 
+        //format!("{}>{}", self.prompt.as_str(), current.get_or_insert(""))); //default: Option<&str>)(self.prompt.as_str())?;
 
-        for (index, e) in state.entries.iter().enumerate() {
-            let file_name = e.file_name();
-            let ss = if Some(index as u32) == state.selected {
+        for (index, file_name) in state.entries.iter().enumerate() {
+            // let file_name = e.file_name();
+            let ss = if Some(index as i32) == state.selected {
                 SelectionStyle::MenuSelected
             } else {
                 SelectionStyle::MenuUnselected
             };
-            let os_str = file_name.to_str();
+            // let os_str = file_name.to_str();
             //.to_str();
-            ttr.selection(os_str.unwrap(), ss)?;
+            ttr.selection(file_name, ss)?;
         }
         Ok(())
+    }
+
+    fn list_entries(&self, pb: &PathBuf) -> Vec<String> {
+        let rd = fs::read_dir(pb).unwrap();
+        let defaults = vec![String::from("..")];
+        let names: Vec<String> = rd.map(|r| r.unwrap().file_name().into_string().unwrap()).collect();
+        [defaults, names].concat()
+    }
+
+    fn bump_index(&self, selected: &Option<i32>, entries: &Vec<String>, forwards: bool) -> i32 {
+
+        match selected {
+            Some(i) => {
+                let bump : i32 = if forwards { 1 } else { -1};
+               let ni = i + bump;
+               if ni < 0 {
+                   (entries.len() - 1) as i32
+               } else if ni > (entries.len() - 1) as i32 {
+                    0
+                } else {
+                    ni
+                }
+            }
+            _ => 0,
+        }
     }
 
     fn inner_loop(
@@ -263,26 +294,42 @@ impl<'a> FileInput<'a> {
         state: FIState,
     ) -> io::Result<PathBuf> {
         // println!("last_key: {:?}", state.path);
+        self.render(ttr, &state)?;
         let k = term.read_key().unwrap();
 
-        self.render(ttr, &state)?;
-
+     println!("k: {:?}", k);
         match k {
+            console::Key::Enter => {
+                let name = &state.entries.get(*&state.selected.unwrap() as usize).unwrap();
+                let pb : PathBuf = state.path.join(name);
+
+                if pb.is_dir() {
+                    let update = FIState{
+                        path: pb,
+                        entries: vec![],
+                        selected: None
+                    };
+                    self.inner_loop(term, ttr, update)
+                } else {
+
+                Ok(pb)
+                }
+            },
+            Char('\u{1b}') => {
+                let rd = fs::read_dir(&state.path).unwrap();
+                let entries = self.list_entries(&state.path); 
+                let index = self.bump_index(&state.selected, &entries, false);
+                let update = FIState {
+                    path: state.path,
+                    entries,
+                    selected: Some(index),
+                };
+                self.inner_loop(term, ttr, update)
+             },
             Char('\t') => {
                 let rd = fs::read_dir(&state.path).unwrap();
-                let entries: Vec<DirEntry> = rd.map(|r| r.unwrap()).collect();
-                let index = match state.selected {
-                    Some(i) => {
-                        let ni = i + 1;
-                        if ni > (entries.len() - 1) as u32 {
-                            0
-                        } else {
-                            ni
-                        }
-                    }
-                    _ => 0,
-                };
-
+                let entries = self.list_entries(&state.path); 
+                let index = self.bump_index(&state.selected, &entries, true);
                 let update = FIState {
                     path: state.path,
                     entries,
@@ -295,9 +342,18 @@ impl<'a> FileInput<'a> {
     }
     /// Like `interact` but allows a specific terminal to be set.
     pub fn interact_on(&self, term: &Term) -> io::Result<PathBuf> {
-        let mut render = TermThemeRenderer::new(term, self.theme);
 
-        let start_path = self.default.clone();
+
+        println!("interact_on...");
+        // loop {
+
+        // }
+        // let completions = complete_path(start_path, false);
+         let start_path = self.default.clone();
+         let mut render = TermThemeRenderer::new(term, self.theme);
+         render.set_prompts_reset_height(false);
+         render.set_prompt_height(1); 
+
         self.inner_loop(
             term,
             &mut render,

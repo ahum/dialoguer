@@ -369,6 +369,10 @@ impl<'a> TermThemeRenderer<'a> {
         self.prompts_reset_height = val;
     }
 
+    pub fn set_prompt_height(&mut self, val : usize) {
+        self.prompt_height = val;
+    }
+    
     pub fn term(&self) -> &Term {
         self.term
     }
