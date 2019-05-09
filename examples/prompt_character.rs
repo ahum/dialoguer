@@ -1,6 +1,6 @@
-extern crate dialoguer;
+extern crate ahum_dialoguer;
 
-use dialoguer::{theme::CustomPromptCharacterTheme, Input};
+use ahum_dialoguer::{theme::CustomPromptCharacterTheme, Input};
 
 fn main() {
     let theme = CustomPromptCharacterTheme::new('>');

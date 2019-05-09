@@ -27,5 +27,4 @@ mod edit;
 mod prompts;
 mod select;
 pub mod theme;
-mod tools;
 mod validate;

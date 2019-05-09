@@ -1,6 +1,6 @@
-extern crate dialoguer;
+extern crate ahum_dialoguer;
 
-use dialoguer::{theme::CustomPromptCharacterTheme, FileInput};
+use ahum_dialoguer::{theme::CustomPromptCharacterTheme, FileInput};
 use std::env;
 use std::path::PathBuf;
 

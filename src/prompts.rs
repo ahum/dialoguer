@@ -1,11 +1,9 @@
 use crate::theme::{get_default_theme, SelectionStyle, TermThemeRenderer, Theme};
 use crate::validate::Validator;
 use console::Key::Char;
-use console::{Key, Term};
+use console::Term;
 use std::fmt::{Debug, Display};
 use std::fs;
-use std::fs::DirEntry;
-use std::fs::ReadDir;
 use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -17,7 +15,7 @@ use std::str::FromStr;
 ///
 /// ```rust,no_run
 /// # fn test() -> Result<(), Box<std::error::Error>> {
-/// use dialoguer::Confirmation;
+/// use ahum_dialoguer::Confirmation;
 ///
 /// if Confirmation::new().with_text("Do you want to continue?").interact()? {
 ///     println!("Looks like you want to continue");
@@ -39,7 +37,7 @@ pub struct Confirmation<'a> {
 ///
 /// ```rust,no_run
 /// # fn test() -> Result<(), Box<std::error::Error>> {
-/// use dialoguer::Input;
+/// use ahum_dialoguer::Input;
 ///
 /// let name = Input::<String>::new().with_prompt("Your name").interact()?;
 /// println!("Name: {}", name);
@@ -74,7 +72,7 @@ struct FIState {
 ///
 /// ```rust,no_run
 /// # fn test() -> Result<(), Box<std::error::Error>> {
-/// use dialoguer::PasswordInput;
+/// use ahum_dialoguer::PasswordInput;
 ///
 /// let password = PasswordInput::new().with_prompt("New Password")
 ///     .with_confirmation("Confirm password", "Passwords mismatching")
@@ -238,25 +236,19 @@ impl<'a> FileInput<'a> {
     }
 
     fn render(&self, ttr: &mut TermThemeRenderer, state: &FIState) -> io::Result<()> {
-
-        // println!("ph: {:?}", ttr.prompt_height);
         ttr.clear()?;
-        
-        let current : Option<&str> = state.path.as_os_str().to_str();
+
+        let current: Option<&str> = state.path.as_os_str().to_str();
         let p = format!("{} {}", self.prompt, current.unwrap_or(""));
 
-        ttr.prompt(&p)?; 
-        //format!("{}>{}", self.prompt.as_str(), current.get_or_insert(""))); //default: Option<&str>)(self.prompt.as_str())?;
+        ttr.prompt(&p)?;
 
         for (index, file_name) in state.entries.iter().enumerate() {
-            // let file_name = e.file_name();
             let ss = if Some(index as i32) == state.selected {
                 SelectionStyle::MenuSelected
             } else {
                 SelectionStyle::MenuUnselected
             };
-            // let os_str = file_name.to_str();
-            //.to_str();
             ttr.selection(file_name, ss)?;
         }
         Ok(())
@@ -264,20 +256,22 @@ impl<'a> FileInput<'a> {
 
     fn list_entries(&self, pb: &PathBuf) -> Vec<String> {
         let rd = fs::read_dir(pb).unwrap();
-        let defaults = vec![String::from("..")];
-        let names: Vec<String> = rd.map(|r| r.unwrap().file_name().into_string().unwrap()).collect();
+        let defaults = vec![String::from("."), String::from("..")];
+        let mut names: Vec<String> = rd
+            .map(|r| r.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
         [defaults, names].concat()
     }
 
     fn bump_index(&self, selected: &Option<i32>, entries: &Vec<String>, forwards: bool) -> i32 {
-
         match selected {
             Some(i) => {
-                let bump : i32 = if forwards { 1 } else { -1};
-               let ni = i + bump;
-               if ni < 0 {
-                   (entries.len() - 1) as i32
-               } else if ni > (entries.len() - 1) as i32 {
+                let bump: i32 = if forwards { 1 } else { -1 };
+                let ni = i + bump;
+                if ni < 0 {
+                    (entries.len() - 1) as i32
+                } else if ni > (entries.len() - 1) as i32 {
                     0
                 } else {
                     ni
@@ -293,31 +287,37 @@ impl<'a> FileInput<'a> {
         ttr: &mut TermThemeRenderer,
         state: FIState,
     ) -> io::Result<PathBuf> {
-        // println!("last_key: {:?}", state.path);
         self.render(ttr, &state)?;
         let k = term.read_key().unwrap();
 
-     println!("k: {:?}", k);
         match k {
             console::Key::Enter => {
-                let name = &state.entries.get(*&state.selected.unwrap() as usize).unwrap();
-                let pb : PathBuf = state.path.join(name);
+                if state.selected.is_none() {
+                    return Ok(state.path);
+                }
+                let name = &state
+                    .entries
+                    .get(*&state.selected.unwrap() as usize)
+                    .unwrap();
 
+                if name.as_str() == "." {
+                    return Ok(state.path);
+                }
+                let pb: PathBuf = state.path.join(name).canonicalize().unwrap();
                 if pb.is_dir() {
-                    let update = FIState{
+                    let entries = self.list_entries(&pb);
+                    let update = FIState {
                         path: pb,
-                        entries: vec![],
-                        selected: None
+                        entries,
+                        selected: Some(0),
                     };
                     self.inner_loop(term, ttr, update)
                 } else {
-
-                Ok(pb)
+                    Ok(pb)
                 }
-            },
-            Char('\u{1b}') => {
-                let rd = fs::read_dir(&state.path).unwrap();
-                let entries = self.list_entries(&state.path); 
+            }
+            Char('\u{1b}') | console::Key::ArrowUp => {
+                let entries = self.list_entries(&state.path);
                 let index = self.bump_index(&state.selected, &entries, false);
                 let update = FIState {
                     path: state.path,
@@ -325,10 +325,9 @@ impl<'a> FileInput<'a> {
                     selected: Some(index),
                 };
                 self.inner_loop(term, ttr, update)
-             },
-            Char('\t') => {
-                let rd = fs::read_dir(&state.path).unwrap();
-                let entries = self.list_entries(&state.path); 
+            }
+            Char('\t') | console::Key::ArrowDown => {
+                let entries = self.list_entries(&state.path);
                 let index = self.bump_index(&state.selected, &entries, true);
                 let update = FIState {
                     path: state.path,
@@ -342,115 +341,21 @@ impl<'a> FileInput<'a> {
     }
     /// Like `interact` but allows a specific terminal to be set.
     pub fn interact_on(&self, term: &Term) -> io::Result<PathBuf> {
+        let start_path = self.default.clone();
+        let mut render = TermThemeRenderer::new(term, self.theme);
+        render.set_prompts_reset_height(false);
+        render.set_prompt_height(1);
 
-
-        println!("interact_on...");
-        // loop {
-
-        // }
-        // let completions = complete_path(start_path, false);
-         let start_path = self.default.clone();
-         let mut render = TermThemeRenderer::new(term, self.theme);
-         render.set_prompts_reset_height(false);
-         render.set_prompt_height(1); 
-
+        let entries = self.list_entries(&self.default.clone().unwrap());
         self.inner_loop(
             term,
             &mut render,
             FIState {
                 path: start_path.unwrap(),
-                entries: vec![],
-                selected: None,
+                selected: Some(0),
+                entries,
             },
         )
-        //let mut
-        // at a dir,
-        // listing children child selected
-        // let mut sel = self.default.as_ref();
-        // let mut children: Option<&ReadDir> = None;
-        // // let mut children: Vec<String> = vec![];
-        // let mut selected_child: Option<&str> = None;
-
-        // loop {
-        //     let default_string = sel.map(|x| {
-        //         let xs: &str = x.to_str().get_or_insert("");
-        //         String::from(xs)
-        //     });
-        //     // let default_string: &mut String = self
-        //     //     .default
-        //     //     .as_ref()
-        //     //     .map(|x| String::from(x.to_str()).as_ref())
-        //     //     .get_or_insert(String::from_str(""));
-        //     render.input_prompt(
-        //         &self.prompt,
-        //         if self.show_default {
-        //             default_string.as_ref().map(|x| x.as_str())
-        //         } else {
-        //             None
-        //         },
-        //     )?;
-
-        //     if children.is_some() {
-        //         let entries: &ReadDir = children.expect("need entries here");
-        //         entries.for_each(|r| {
-        //             let e: DirEntry = r.unwrap();
-        //             let name: &str = e.file_name().to_str().unwrap();
-        //             render.selection(
-        //                 name,
-        //                 if selected_child == Some(name) {
-        //                     SelectionStyle::MenuSelected
-        //                 } else {
-        //                     SelectionStyle::MenuUnselected
-        //                 },
-        //             );
-        //         });
-        //     }
-        //     let key = term.read_key()?;
-
-        //     //let input = term.read_line()?;
-        //     //render.add_line();
-        //     // if input.is_empty() {
-        //     //     render.clear()?;
-        //     //     if let Some(ref default) = self.default {
-        //     //         // render.single_prompt_selection(
-        //     //         //     &self.prompt,
-        //     //         //     &default_string.map(|x| x.as_str().get_or_insert(""))?,
-        //     //         // )?;
-        //     //         return Ok(default.clone());
-        //     //     } else if !self.permit_empty {
-        //     //         continue;
-        //     //     }
-        //     // }
-        //     // render.clear()?;
-        //     // if let Some(ref validator) = self.validator {
-        //     //     if let Some(err) = validator(&input) {
-        //     //         render.error(&err)?;
-        //     //         continue;
-        //     //     }
-        //     // }
-        //     println!("got raw key: {:?}", key);
-        //     match key {
-        //         Char('\t') => {
-        //             for d in fs::read_dir(self.default.as_ref().unwrap())? {
-        //                 let entry = d.expect("git entry");
-        //                 //entry.file_name()
-        //                 //println!("{:?}", entry.file_name());
-        //             }
-        //             continue;
-        //         }
-        //         _ => continue,
-        //     }
-        //     // match input.parse::<PathBuf>() {
-        //     //     Ok(value) => {
-        //     //         render.single_prompt_selection(&self.prompt, &input)?;
-        //     //         return Ok(value);
-        //     //     }
-        //     //     Err(err) => {
-        //     //         render.error(&err.to_string())?;
-        //     //         continue;
-        //     //     }
-        //     // }
-        // }
     }
 }
 

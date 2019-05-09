@@ -13,7 +13,7 @@ use tempfile::NamedTempFileOptions;
 ///
 /// ```rust,no_run
 /// # fn test() -> Result<(), Box<std::error::Error>> {
-/// use dialoguer::Editor;
+/// use ahum_dialoguer::Editor;
 ///
 /// if let Some(rv) = Editor::new().edit("Enter a commit message").unwrap() {
 ///     println!("Your message:");

@@ -1,6 +1,6 @@
-extern crate dialoguer;
+extern crate ahum_dialoguer;
 
-use dialoguer::{theme::ColorfulTheme, Checkboxes};
+use ahum_dialoguer::{theme::ColorfulTheme, Checkboxes};
 
 fn main() {
     let checkboxes = &[

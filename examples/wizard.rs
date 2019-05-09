@@ -1,11 +1,11 @@
+extern crate ahum_dialoguer;
 extern crate console;
-extern crate dialoguer;
 
 use std::error::Error;
 use std::net::IpAddr;
 
+use ahum_dialoguer::{theme::ColorfulTheme, Confirmation, Input, Select};
 use console::Style;
-use dialoguer::{theme::ColorfulTheme, Confirmation, Input, Select};
 
 #[derive(Debug)]
 struct Config {

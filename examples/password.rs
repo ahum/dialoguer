@@ -1,6 +1,6 @@
-extern crate dialoguer;
+extern crate ahum_dialoguer;
 
-use dialoguer::{theme::ColorfulTheme, PasswordInput};
+use ahum_dialoguer::{theme::ColorfulTheme, PasswordInput};
 
 fn main() {
     let password = PasswordInput::with_theme(&ColorfulTheme::default())

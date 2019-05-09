@@ -1,13 +1,13 @@
 [package]
-name = "dialoguer"
+name = "ahum_dialoguer"
 edition = "2018"
-description = "A command line prompting library."
-version = "0.3.0"
+description = "A fork of dialoguer - A command line prompting library."
+version = "0.4.0"
 authors = ["Armin Ronacher <armin.ronacher@active-4.com>"]
 keywords = ["cli", "menu", "prompt"]
 license = "MIT"
-homepage = "https://github.com/mitsuhiko/dialoguer"
-documentation = "https://docs.rs/dialoguer"
+homepage = "https://github.com/ahum/dialoguer"
+documentation = "https://docs.rs/ahum_dialoguer"
 readme = "README.md"
 [dependencies]
 console = ">=0.3.0, <1.0.0"

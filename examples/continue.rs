@@ -1,6 +1,6 @@
-extern crate dialoguer;
+extern crate ahum_dialoguer;
 
-use dialoguer::{Confirmation, Input};
+use ahum_dialoguer::{Confirmation, Input};
 
 fn main() {
     if Confirmation::new()
