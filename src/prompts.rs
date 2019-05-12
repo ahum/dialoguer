@@ -65,6 +65,7 @@ struct FIState {
     path: PathBuf,
     entries: Vec<String>,
     selected: Option<i32>,
+    filter: String,
 }
 /// Renders a password input prompt.
 ///
@@ -281,6 +282,12 @@ impl<'a> FileInput<'a> {
         }
     }
 
+    fn filter_entries(&self, filter: &String, entries: Vec<String>) -> Vec<String> {
+        entries
+            .into_iter()
+            .filter(|e: &String| filter == "" || e.starts_with(filter))
+            .collect()
+    }
     fn inner_loop(
         &self,
         term: &Term,
@@ -306,10 +313,12 @@ impl<'a> FileInput<'a> {
                 let pb: PathBuf = state.path.join(name).canonicalize().unwrap();
                 if pb.is_dir() {
                     let entries = self.list_entries(&pb);
+
                     let update = FIState {
                         path: pb,
                         entries,
                         selected: Some(0),
+                        filter: String::from(""),
                     };
                     self.inner_loop(term, ttr, update)
                 } else {
@@ -318,21 +327,49 @@ impl<'a> FileInput<'a> {
             }
             Char('\u{1b}') | console::Key::ArrowUp => {
                 let entries = self.list_entries(&state.path);
-                let index = self.bump_index(&state.selected, &entries, false);
+                let filtered = self.filter_entries(&state.filter, entries);
+                let index = self.bump_index(&state.selected, &filtered, false);
                 let update = FIState {
                     path: state.path,
-                    entries,
+                    entries: filtered,
                     selected: Some(index),
+                    filter: state.filter,
                 };
                 self.inner_loop(term, ttr, update)
             }
             Char('\t') | console::Key::ArrowDown => {
                 let entries = self.list_entries(&state.path);
-                let index = self.bump_index(&state.selected, &entries, true);
+                let filtered = self.filter_entries(&state.filter, entries);
+                let index = self.bump_index(&state.selected, &filtered, true);
                 let update = FIState {
                     path: state.path,
-                    entries,
+                    entries: filtered,
                     selected: Some(index),
+                    filter: state.filter,
+                };
+                self.inner_loop(term, ttr, update)
+            }
+            Char('\u{7f}') => {
+                let mut filter = state.filter.clone();
+                filter.pop();
+                let filtered = self.filter_entries(&filter, self.list_entries(&state.path));
+                let update = FIState {
+                    path: state.path,
+                    entries: filtered,
+                    selected: state.selected,
+                    filter,
+                };
+                self.inner_loop(term, ttr, update)
+            }
+            Char(v) => {
+                let filter: String = format!("{}{}", state.filter, v);
+
+                let filtered = self.filter_entries(&filter, state.entries);
+                let update = FIState {
+                    path: state.path,
+                    entries: filtered,
+                    selected: state.selected,
+                    filter,
                 };
                 self.inner_loop(term, ttr, update)
             }
@@ -354,6 +391,7 @@ impl<'a> FileInput<'a> {
                 path: start_path.unwrap(),
                 selected: Some(0),
                 entries,
+                filter: String::from(""),
             },
         )
     }
